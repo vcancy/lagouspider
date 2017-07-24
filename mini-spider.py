@@ -3,6 +3,7 @@ import requests
 from pymongo import MongoClient
 
 companys = []
+
 fn = 1
 totalCount = 1
 url ='https://www.lagou.com/jobs/positionAjax.json?city=%E5%8C%97%E4%BA%AC&needAddtionalResult=false'
@@ -25,15 +26,25 @@ headers ={
 session = requests.session()
 client = MongoClient()
 db = client.lagou
-while fn<=totalCount:
+while fn<=1:
     print('开始处理第{}页'.format(fn))
     data = 'first=false&pn={}&kd=Python'.format(fn)
     response = session.request(url=url, method='post', data=data, headers=headers)
     pagedata = response.json()
     print(pagedata)
     if pagedata.get('code') == 0:
-        companys = pagedata.get('content').get('positionResult').get('result')
+        data = pagedata.get('content').get('positionResult').get('result')
         totalCount = pagedata.get('content').get('positionResult').get('totalCount')
         totalCount = totalCount/15+1 if totalCount%15>0 else totalCount/15 #最大显示30页
         fn +=1
-    db.lagou.insert(companys)
+        companys.extend(data)
+
+inserts = []
+for doc in companys:
+    companyShortName = doc.get('companyShortName')
+    if db.lagou.find_one({'companyShortName':companyShortName})==None:
+        inserts.append(doc)
+    else:print('重复记录:{}'.format(companyShortName))
+
+if len(inserts)>0:
+    db.lagou.insert(inserts)
