@@ -1,11 +1,13 @@
-# coding=gbk
 import requests
 from pymongo import MongoClient
 
+CITIES = ['上海', '北京', '深圳', '广州', '杭州', '成都', '南京', '武汉', '西安', '厦门', '长沙', '苏州',
+          '天津', '重庆', '郑州', '青岛', '合肥', '福州', '济南', '大连', '珠海', '无锡', '佛山', '东莞', '宁波',
+          '常州', '沈阳', '石家庄', '昆明', '南昌', '南宁', '哈尔滨', '海口', '中山', '惠州', '贵阳', '长春',
+          '太原', '嘉兴', '泰安', '昆山', '烟台', '兰州', '泉州']
+
 companys = []
-fn = 1
-totalCount = 1
-url ='https://www.lagou.com/jobs/positionAjax.json?city=%E5%8C%97%E4%BA%AC&needAddtionalResult=false'
+url ='https://www.lagou.com/jobs/positionAjax.json?px=new&city={}&needAddtionalResult=false'
 headers ={
 'Accept':'application/json, text/javascript, */*; q=0.01',
 'Accept-Encoding':'gzip, deflate, br',
@@ -25,15 +27,31 @@ headers ={
 session = requests.session()
 client = MongoClient()
 db = client.lagou
-while fn<=totalCount:
-    print('��ʼ������{}ҳ'.format(fn))
-    data = 'first=false&pn={}&kd=Python'.format(fn)
-    response = session.request(url=url, method='post', data=data, headers=headers)
-    pagedata = response.json()
-    print(pagedata)
-    if pagedata.get('code') == 0:
-        companys = pagedata.get('content').get('positionResult').get('result')
-        totalCount = pagedata.get('content').get('positionResult').get('totalCount')
-        totalCount = totalCount/15+1 if totalCount%15>0 else totalCount/15 #�����ʾ30ҳ
-        fn +=1
-    db.lagou.insert(companys)
+
+
+def spider_run(url,hearders,city,fn=1,totalCount=1):
+    while fn <= totalCount:
+        print('开始处理第{}页'.format(fn))
+        data = 'first=false&pn={}&kd=Python'.format(fn)
+        response = session.request(url=url.format(city), method='post', data=data, headers=headers)
+        pagedata = response.json()
+        if pagedata.get('code') == 0:
+            data = pagedata.get('content').get('positionResult').get('result')
+            totalCount = pagedata.get('content').get('positionResult').get('totalCount')
+            totalCount = totalCount / 15 + 1 if totalCount % 15 > 0 else totalCount / 15  # 最大显示30页
+            fn += 1
+            companys.extend(data)
+    inserts = []
+    for doc in companys:
+        companyShortName = doc.get('companyShortName')
+        city = doc.get('city')
+        if db.lagou.find_one({'companyShortName': companyShortName,"city":city}) == None:
+            inserts.append(doc)
+            print('新增公司{}'.format(companyShortName))
+        else:
+            print('重复记录:{}'.format(companyShortName))
+    if len(inserts) > 0:
+        db.lagou.insert(inserts)
+
+for city in CITIES:
+    spider_run(url,headers,city)
